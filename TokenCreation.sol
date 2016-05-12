@@ -15,35 +15,40 @@ You should have received a copy of the GNU lesser General Public License
 along with the DAO.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+/**************************************************************************************************
 
-/*
- * Token Creation contract, used by the DAO to create its tokens and initialize
- * its ether. Feel free to modify the divisor method to implement different
- * Token Creation parameters
-*/
+Ce contrat fait parti de la DAO, et s'occupe de la création des tokens / jetons de la DAO ainsi que
+l'initialisation des ethers.
+
+Les fonctions incluses sont:
+- Création de tokens (createTokenProxy)
+- Remboursement (refund)
+- Acquisition du taux ETH/Token (divisor)
+
+**************************************************************************************************/
 
 import "./Token.sol";
 import "./ManagedAccount.sol";
 
 contract TokenCreationInterface {
 
-    // End of token creation, in Unix time
+    // Date de fin du crowdfunding, en temps Unix
     uint public closingTime;
-    // Minimum fueling goal of the token creation, denominated in tokens to
-    // be created
+    // Montant minimal de tokens à générer pour que le crowdfunding soit considéré comme réussi
     uint public minTokensToCreate;
-    // True if the DAO reached its minimum fueling goal, false otherwise
+    // Vrai si l'objectif est atteint, faux sinon
     bool public isFueled;
-    // For DAO splits - if privateCreation is 0, then it is a public token
-    // creation, otherwise only the address stored in privateCreation is
-    // allowed to create tokens
+    // For DAO splits -
+    // Si privatecreation est égal à 0, la création de tokens est décidé publiquement (par consensus)
+    // Sinon le compte en question gère la création de tokens
     address public privateCreation;
-    // hold extra ether which has been sent after the DAO token
-    // creation rate has increased
+    // Après que le taux de création des DAO est augmenté, les ethers "supplémentaires" sont envoyés à
+    // l'adresse du compte "extraBalance"
     ManagedAccount public extraBalance;
-    // tracks the amount of wei given from each contributor (used for refund)
+    // liste des ethers (en wei) envoyés par chaque adresse (pour le remboursement)
     mapping (address => uint256) weiGiven;
 
+    /* Le constructeur du contrat, mis en commentaire */
     /// @dev Constructor setting the minimum fueling goal and the
     /// end of the Token Creation
     /// @param _minTokensToCreate Minimum fueling goal in number of
@@ -59,17 +64,13 @@ contract TokenCreationInterface {
         //  address _privateCreation
     //  );
 
-    /// @notice Create Token with `_tokenHolder` as the initial owner of the Token
-    /// @param _tokenHolder The address of the Tokens's recipient
-    /// @return Whether the token creation was successful
+    // Créé des tokens pour l'adresse _tokenHolder, retourne le succès, ou non.
     function createTokenProxy(address _tokenHolder) returns (bool success);
 
-    /// @notice Refund `msg.sender` in the case the Token Creation did
-    /// not reach its minimum fueling goal
+    // Rembourse le compte le demandant (msg.sender) si le montant minimum n'est pas atteint
     function refund();
 
-    /// @return The divisor used to calculate the token creation rate during
-    /// the creation phase
+    // Retourne à tout moment la valeur actuel du taux ETH/DAOToken
     function divisor() constant returns (uint divisor);
 
     event FuelingToDate(uint value);
@@ -79,6 +80,8 @@ contract TokenCreationInterface {
 
 
 contract TokenCreation is TokenCreationInterface, Token {
+    // Constructeur, prends en entrée le montant minimal de tokens à créer, la date de clôture du crowdfunding,
+    // ainsi que l'adresse (ou non) du compte pouvant créer des tokens.
     function TokenCreation(
         uint _minTokensToCreate,
         uint _closingTime,
@@ -90,6 +93,12 @@ contract TokenCreation is TokenCreationInterface, Token {
         extraBalance = new ManagedAccount(address(this), true);
     }
 
+    // Fonction de création des tokens.
+    // Vérifie que la date de clôture n'est pas atteint, que l'on envoie des ethers et que le
+    // compte est autorisé (toujours ou juste le compte "privateCreation").
+    //
+    // Créer ensuite un nombre de token en fonction de l'ether envoyé et le taux ETH/DAO.
+    // Incrémente ensuite le nombre de tokens total (et vérifie si l'objectif est atteint)
     function createTokenProxy(address _tokenHolder) returns (bool success) {
         if (now < closingTime && msg.value > 0
             && (privateCreation == 0 || privateCreation == msg.sender)) {
@@ -109,6 +118,8 @@ contract TokenCreation is TokenCreationInterface, Token {
         throw;
     }
 
+    // Remboursement si les conditions n'ont pas été atteinte. (ne fonctionne qu'une fois)
+    // nb: vérifie qu'on envoie pas d'ether
     function refund() noEther {
         if (now > closingTime && !isFueled) {
             // Get extraBalance - will only succeed when called for the first time
@@ -125,6 +136,7 @@ contract TokenCreation is TokenCreationInterface, Token {
         }
     }
 
+    // Taux ETH/Token en fonction du temps
     function divisor() constant returns (uint divisor) {
         // The number of (base unit) tokens per wei is calculated
         // as `msg.value` * 20 / `divisor`
