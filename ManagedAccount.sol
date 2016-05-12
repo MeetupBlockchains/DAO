@@ -15,45 +15,51 @@ You should have received a copy of the GNU lesser General Public License
 along with the DAO.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+/**************************************************************************************************
+
+Ce contrat fait parti de la DAO, et s'occupe de la gestion des comptes de la DAO.
+
+Les fonctions incluses sont:
+- Paiment à un compte (PayOut)
+
+**************************************************************************************************/
 
 /*
-Basic account, used by the DAO contract to separately manage both the rewards 
-and the extraBalance accounts. 
+Basic account, used by the DAO contract to separately manage both the rewards
+and the extraBalance accounts.
 */
 
 contract ManagedAccountInterface {
-    // The only address with permission to withdraw from this account
+    // La seule adresse ayant le droit de retirer des ethers
     address public owner;
-    // If true, only the owner of the account can receive ether from it
+    // Si vrai, seul le propriétaire du compte peut recevoir de l'ether
     bool public payOwnerOnly;
-    // The sum of ether (in wei) which has been sent to this contract
+    // Le total d'ether (en wei) envoyé au compte
     uint public accumulatedInput;
 
-    /// @notice Sends `_amount` of wei to _recipient
-    /// @param _amount The amount of wei to send to `_recipient`
-    /// @param _recipient The address to receive `_amount` of wei
-    /// @return True if the send completed
+    // Envoie une somme d'ether _amount à un compte _recipient, retourne bool
     function payOut(address _recipient, uint _amount) returns (bool);
 
     event PayOut(address indexed _recipient, uint _amount);
 }
 
-
 contract ManagedAccount is ManagedAccountInterface{
 
-    // The constructor sets the owner of the account
+    // Le constructeur décide du propriétaire du compte
     function ManagedAccount(address _owner, bool _payOwnerOnly) {
         owner = _owner;
         payOwnerOnly = _payOwnerOnly;
     }
 
-    // When the contract receives a transaction without data this is called. 
-    // It counts the amount of ether it receives and stores it in 
-    // accumulatedInput.
+    // Dans le cas où le compte reçoit une transaction d'ether, rajoute la somme au total.
     function() {
         accumulatedInput += msg.value;
     }
 
+    // Envoie de l'ether à l'adresse _recipient. Retourne faux si :
+    // - il y a de l'ether dans la tx
+    // - le messager n'est pas le propriétaire
+    //
     function payOut(address _recipient, uint _amount) returns (bool) {
         if (msg.sender != owner || msg.value > 0 || (payOwnerOnly && _recipient != owner))
             throw;
