@@ -15,62 +15,55 @@ You should have received a copy of the GNU lesser General Public License
 along with the DAO.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+/**************************************************************************************************
 
-/*
-Basic, standardized Token contract with no "premine". Defines the functions to
-check token balances, send tokens, send tokens on behalf of a 3rd party and the
-corresponding approval process. Tokens need to be created by a derived
-contract (e.g. TokenCreation.sol).
+Ce fichier fait parti de la DAO, et s'occupe de la gestion des tokens / jetons de la DAO.
 
-Thank you ConsenSys, this contract originated from:
+Les fonctions incluses sont:
+- Vérification du solde d'un compte (CheckToken)
+- Envoie de token (sendtoken)
+- Envoie de token pour un tiers + vérification
+
+La création de ces tokens se fait via un contrat tier (TokenCreation.sol)
+
+Ce contrat a été originellement écrit par ConsenSys et adapté par Slock.it :
 https://github.com/ConsenSys/Tokens/blob/master/Token_Contracts/contracts/Standard_Token.sol
-Which is itself based on the Ethereum standardized contract APIs:
-https://github.com/ethereum/wiki/wiki/Standardized_Contract_APIs
-*/
+
+**************************************************************************************************/
 
 /// @title Standard Token Contract.
 
 contract TokenInterface {
-    mapping (address => uint256) balances;
-    mapping (address => mapping (address => uint256)) allowed;
+    mapping (address => uint256) balances; // balance des possesseurs de DAO tokens
+    mapping (address => mapping (address => uint256)) allowed; // autorisation de transfert par une autre adresse
 
-    /// Total amount of tokens
+    /// Montant total des tokens DAO (En entier, donc avec les décimales !)
     uint256 public totalSupply;
 
-    /// @param _owner The address from which the balance will be retrieved
-    /// @return The balance
+    /* Liste des paramètres */
+
+    // Retourne le solde d'un compte
     function balanceOf(address _owner) constant returns (uint256 balance);
 
-    /// @notice Send `_amount` tokens to `_to` from `msg.sender`
-    /// @param _to The address of the recipient
-    /// @param _amount The amount of tokens to be transferred
-    /// @return Whether the transfer was successful or not
+    // Transfère le montant _amount au compte _to, et retourne le succès ou non du transfert
     function transfer(address _to, uint256 _amount) returns (bool success);
 
-    /// @notice Send `_amount` tokens to `_to` from `_from` on the condition it
-    /// is approved by `_from`
-    /// @param _from The address of the origin of the transfer
-    /// @param _to The address of the recipient
-    /// @param _amount The amount of tokens to be transferred
-    /// @return Whether the transfer was successful or not
+    // Transfère le montant _amount au compte _to, depuis le compte _from. (retourne le succès, ou non)
+    // Cette fonction permet de transférer depuis un compte tiers (approuvé par la fonction approve)
     function transferFrom(address _from, address _to, uint256 _amount) returns (bool success);
 
-    /// @notice `msg.sender` approves `_spender` to spend `_amount` tokens on
-    /// its behalf
-    /// @param _spender The address of the account able to transfer the tokens
-    /// @param _amount The amount of tokens to be approved for transfer
-    /// @return Whether the approval was successful or not
+    // Permet d'approuver l'utilisation de son compte pour un transfert d'un certain montant par un compte tiers
+    // Approuve le compte _spender pour un montant de _amount.
     function approve(address _spender, uint256 _amount) returns (bool success);
 
-    /// @param _owner The address of the account owning tokens
-    /// @param _spender The address of the account able to transfer the tokens
-    /// @return Amount of remaining tokens of _owner that _spender is allowed
-    /// to spend
+    // Permet de savoir combien un certain compte _spender peut dépenser de tokens d'un autre compte _owner
+    // Le résultat obtenu est le nombre de tokens restant à dépenser
     function allowance(
         address _owner,
         address _spender
     ) constant returns (uint256 remaining);
 
+    // Evénements permettant d'avoir une vue sur le transfert de token et le process d'approbation
     event Transfer(address indexed _from, address indexed _to, uint256 _amount);
     event Approval(
         address indexed _owner,
@@ -81,14 +74,17 @@ contract TokenInterface {
 
 
 contract Token is TokenInterface {
-    // Protects users by preventing the execution of method calls that
-    // inadvertently also transferred ether
+    // Cette condition (modifier) vérifie que le sender n'envoie pas d'Ether !
+    // En effet il n'y a besoin ici que de gas pour payer les transactions,
+    // si une personne envoie de l'ether, cette somme sera perdue (non gérée par le contrat)
+    // Pour éviter cela, on ajoute cette condition qui rejetera toutes transactions ayant joint de l'ether.
     modifier noEther() {if (msg.value > 0) throw; _}
 
     function balanceOf(address _owner) constant returns (uint256 balance) {
         return balances[_owner];
     }
 
+    // Simple fonction de transfert. Ok si la balance est suffisante, sinon on rejette
     function transfer(address _to, uint256 _amount) noEther returns (bool success) {
         if (balances[msg.sender] >= _amount && _amount > 0) {
             balances[msg.sender] -= _amount;
@@ -100,6 +96,7 @@ contract Token is TokenInterface {
         }
     }
 
+    // identique, mais on vérifie d'abord que le compte peut envoyer cette somme depuis le compte ciblé.
     function transferFrom(
         address _from,
         address _to,
